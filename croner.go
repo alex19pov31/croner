@@ -1,6 +1,7 @@
 package croner
 
 import (
+	"errors"
 	"regexp"
 	"strconv"
 	"strings"
@@ -90,11 +91,21 @@ type CronTimer struct {
 	monthCondition   *ConditionElement
 	weekdayCondition *ConditionElement
 	ticker           *time.Ticker
+	err              error
 	chSuccess        chan bool
+}
+
+// GetError return error
+func (cronTimer *CronTimer) GetError() error {
+	return cronTimer.err
 }
 
 // Check check cron rule
 func (cronTimer *CronTimer) Check(t time.Time) bool {
+	if cronTimer.GetError() != nil {
+		return false
+	}
+
 	elementCount := cronTimer.getCountCondition()
 	if elementCount == 0 {
 		return true
@@ -195,8 +206,14 @@ func (cronTimer *CronTimer) addElement(value string, maxValue int) *ConditionEle
 }
 
 // Parse parse cron record
-func (cronTimer *CronTimer) Parse(value string) {
+func (cronTimer *CronTimer) Parse(value string) error {
 	pregMatch := `([\d\/\,\*\-]+)\s+([\d\/\,\*\-]+)\s+([\d\/\,\*\-]+)\s+([\d\/\,\*\-]+)\s+([\d\/\,\*\-]+)`
+
+	cronTimer.err = nil
+	if ok, _ := regexp.MatchString(pregMatch, value); !ok {
+		cronTimer.err = errors.New("Invalid record")
+		return cronTimer.err
+	}
 
 	data := regexp.MustCompile(pregMatch).FindAllStringSubmatch(value, -1)
 	minute := data[0][1]
@@ -220,6 +237,8 @@ func (cronTimer *CronTimer) Parse(value string) {
 	if weekday != "*" {
 		cronTimer.weekdayCondition = cronTimer.addElement(weekday, 6)
 	}
+
+	return nil
 }
 
 func (cronTimer *CronTimer) getCountCondition() int {
